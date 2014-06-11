@@ -62,6 +62,7 @@ class FluentExt::TextParser
     include Fluent::Configurable
 
     config_param :suppress_parse_error_log, :bool, :default => false
+    config_param :emit_parse_failures, :bool, :default => false
 
     def initialize(regexp, conf={})
       super()
@@ -72,19 +73,29 @@ class FluentExt::TextParser
     end
 
     def call(text)
+      parse_failure = false
       m = @regexp.match(text)
       unless m
         unless @suppress_parse_error_log
           @log.warn "pattern not match: #{text}"
         end
 
-        return nil, nil
+        parse_failure = true
+        unless @emit_parse_failures
+          return nil, nil
+        end
       end
 
       record = {}
-      m.names.each {|name|
-        record[name] = m[name] if m[name]
-      }
+      if not parse_failure
+        m.names.each {|name|
+          record[name] = m[name] if m[name]
+        }
+      else
+        record['time'] = Time.at(Fluent::Engine.now).to_s
+        record['message'] = text
+      end
+
       parse_time(record)
     end
   end
